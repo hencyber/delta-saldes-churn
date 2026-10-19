@@ -1,9 +1,36 @@
 name: CI
 
-on: push
+on:
+  push:
+  # Gör att jobbet kan köras manuellt med valfri datafil (Actions → Run workflow)
+  workflow_dispatch:
+    inputs:
+      datafil:
+        description: "Datafil som ska kontrolleras, sökväg i repot"
+        required: false
+        default: data/kundbas.csv
 
 jobs:
+  datakontroll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install -e ".[data]"
+
+      # Filnamnet går via en miljövariabel i stället för direkt in i skriptet
+      - name: Kontrollera datan mot schemat
+        env:
+          DATAFIL: ${{ inputs.datafil || 'data/kundbas.csv' }}
+        run: python -m kontroller.schema "$DATAFIL"
+
   allt:
+    # Ingen träning på data som inte klarar kontrollen
+    needs: datakontroll
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
