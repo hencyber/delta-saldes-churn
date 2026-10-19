@@ -1,6 +1,11 @@
 name: CI
 
-on: push
+# Körs vid varje push och vid pull requests mot main, så att en PR visar
+# om den är grön innan någon granskar den.
+on:
+  push:
+  pull_request:
+    branches: [main]
 
 jobs:
   allt:
@@ -8,12 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Samma version som servern som gör ringlistan (3.11).
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
-      - run: pip install -e .
+      # [dev] behövs för pytest. Utan den finns inte pytest på runnern (ärende F1).
+      - run: pip install -e ".[dev]"
 
       - run: pytest
 
       - run: python -m churn.model
+
+      # Kvalitetsgrinden: felkod 1 om ROC AUC är under tröskeln. Ersätter testet
+      # som läste outputs/matvarden.json (ärende F2).
+      - run: python -m churn.evaluate
