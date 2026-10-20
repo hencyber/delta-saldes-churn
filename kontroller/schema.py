@@ -15,9 +15,7 @@ SCHEMA = pa.DataFrameSchema(
         "kund_id": pa.Column(int, unique=True),
         # coerce=True gör att saknade åldrar blir ett tydligt fel (nullable=False)
         # i stället för ett förvirrande typfel
-        "alder": pa.Column(
-            float, pa.Check.in_range(18, 110), nullable=False, coerce=True
-        ),
+        "alder": pa.Column(float, pa.Check.in_range(18, 110), nullable=False, coerce=True),
         "region": pa.Column(str, pa.Check.isin(["Väst", "Norr", "Stockholm", "Mitt", "Syd"])),
         "abonnemang": pa.Column(str, pa.Check.isin(["Bas", "Standard", "Premium"])),
         "manader_som_kund": pa.Column(int, pa.Check.ge(0)),
