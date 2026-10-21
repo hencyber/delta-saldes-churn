@@ -24,3 +24,7 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Modellfiler ska inte checkas in, de sparas som artefakter i CI
+*.joblib
+models/
