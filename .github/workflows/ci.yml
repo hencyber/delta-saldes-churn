@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - run: pip install -e ".[data]"
 
@@ -32,9 +34,33 @@ jobs:
           DATAFIL: ${{ inputs.datafil || 'data/kundbas.csv' }}
         run: python -m kontroller.schema "$DATAFIL"
 
-  allt:
-    # Ingen träning på data som inte klarar kontrollen
-    needs: datakontroll
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # Alla versioner körs klart även om en fallerar, så vi ser exakt vilka som fungerar.
+      fail-fast: false
+      matrix:
+        # Servern kör 3.11 och ska uppgraderas under året (ärende 2).
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+
+      # cache: pip återanvänder nedladdade paket. Nyckeln bygger på pyproject.toml,
+      # så cachen byts ut när beroendena ändras (ärende 1).
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # [dev] behövs för pytest. Utan den finns inte pytest på runnern (ärende F1).
+      - run: pip install -e ".[dev]"
+
+      - run: pytest
+
+  train:
+    # Ingen träning på data som inte klarar kontrollen eller på kod som inte klarar testerna.
+    needs: [datakontroll, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,14 +69,48 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      # [dev] behövs för pytest. Utan den finns inte pytest på runnern (ärende F1).
-      - run: pip install -e ".[dev]"
+      - run: pip install -e .
 
-      - run: pytest
-
+      # Skriver outputs/modell.joblib och outputs/matvarden.json med commit och data_sha256.
       - run: python -m churn.model
 
-      # Kvalitetsgrinden: felkod 1 om ROC AUC är under tröskeln. Ersätter testet
-      # som läste outputs/matvarden.json (ärende F2).
+      # Varje jobb startar på en ny runner, så modellen skickas vidare som artefakt.
+      # SHA i namnet gör att modellen går att spåra till exakt den commit som skapade den.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: modell-${{ github.sha }}
+          path: outputs/
+
+  utvardera:
+    needs: train
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - run: pip install -e .
+
+      # Samma modell som train skapade, ingen ny träning.
+      - uses: actions/download-artifact@v8
+        with:
+          name: modell-${{ github.sha }}
+          path: outputs
+
+      # Mätvärdena skrivs före tröskeln, så att de syns även när modellen stoppas.
+      - name: Skriv mätvärden i sammanfattningen
+        run: |
+          echo "## Mätvärden" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat outputs/matvarden.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # Kvalitetsgrinden: felkod 1 om ROC AUC är under tröskeln (MIN_ROC_AUC, standard 0.70).
       - run: python -m churn.evaluate
