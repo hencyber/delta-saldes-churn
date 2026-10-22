@@ -1,0 +1,45 @@
+# Allt som skickas till docker build. Bara det imagen behöver ska med:
+# pyproject.toml, src/ och outputs/ (modellen). Resten gör bygget långsammare
+# och kan läcka saker som inte hör hemma i en image.
+
+# Git och CI
+.git
+.github
+
+# Data och tester behövs inte för att servera modellen
+data/
+tests/
+kontroller/
+arenden/
+
+# Gamla incheckade modeller. Imagen ska bara få den godkända från outputs/
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Hemligheter
+.env
+.env.*
+
+# Editorer och OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dokumentation
+*.md
+Dockerfile
+.dockerignore
