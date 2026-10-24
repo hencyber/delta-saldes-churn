@@ -71,7 +71,8 @@ python -m churn.score           # skriver outputs/ringlista.csv
 | `src/churn/evaluate.py` | Kvalitetsgrind på mätvärdena |
 | `src/churn/score.py` | Ringlistan |
 | `tests/` | Tester på tre nivåer: kod, data och modell |
-| `models/modell.joblib` | Modellen som kundtjänst använder just nu |
+| `kontroller/schema.py` | Datakontrollen (pandera-schemat) |
+| `src/churn/app.py`, `Dockerfile` | API:t och imagen som serverar modellen |
 | `arenden/` | Ärendena, och `skapa.sh` som gör dem till issues |
 | `.github/workflows/ci.yml` | Vårt CI |
 
