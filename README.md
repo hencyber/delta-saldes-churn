@@ -91,11 +91,12 @@ Jobben körs i den här ordningen:
 4. `utvardera` laddar ner samma artefakt, visar mätvärdena i körningens Summary och stoppar
    pipelinen om ROC AUC är under 0,70.
 5. `docker` bygger en image med samma modell, smoke-testar `/health` och `/predict` och pushar
-   imagen till `ghcr.io/hencyber/delta-saldes-churn:<commit-SHA>`. Push görs bara från main.
+   imagen för amd64 och arm64 till `ghcr.io/hencyber/delta-saldes-churn:<commit-SHA>`. Push görs
+   bara från main.
 
 Om ett jobb fallerar hoppas alla jobb efter det över. `main` är skyddad: varje ändring går via en
-pull request som en teamkamrat godkänner, och `datakontroll`, `test` och `utvardera` måste vara
-gröna innan den kan slås ihop.
+pull request som en teamkamrat godkänner, och `datakontroll`, alla tre `test`-jobb, `utvardera`
+och `docker` måste vara gröna innan den kan slås ihop.
 
 ### Kvalitetströskeln
 
@@ -108,7 +109,8 @@ vi kräver minst 0,70. Tröskeln kan ändras med miljövariabeln `MIN_ROC_AUC`.
 
 Imagen är taggad med commitens SHA och innehåller modellen från artefakten med samma SHA, alltså
 exakt den modell som klarade utvärderingen. `matvarden.json` i artefakten innehåller commit,
-datafil och datans sha256. Samma uppgifter visas av `/health` i den körande tjänsten.
+datafil och datans sha256. `/health` i den körande tjänsten visar commit, ROC AUC och datans
+sha256, så man kan se vilken modell som körs utan att ladda ner artefakten.
 
 ### Köra tjänsten lokalt
 
