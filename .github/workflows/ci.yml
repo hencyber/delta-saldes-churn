@@ -114,3 +114,53 @@ jobs:
 
       # Kvalitetsgrinden: felkod 1 om ROC AUC är under tröskeln (MIN_ROC_AUC, standard 0.70).
       - run: python -m churn.evaluate
+
+  docker:
+    # Paketerar exakt den modell som klarade utvärderingen.
+    needs: utvardera
+    runs-on: ubuntu-latest
+    # packages: write behövs för att pusha till ghcr.io med GITHUB_TOKEN.
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Taggen är commitens SHA, så imagen går att spåra till koden och modellen.
+      IMAGE: ghcr.io/hencyber/delta-saldes-churn:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: modell-${{ github.sha }}
+          path: outputs
+
+      - name: Bygg imagen
+        run: docker build -t "$IMAGE" .
+
+      # Startar containern och kontrollerar att tjänsten svarar. Testar inte hur bra
+      # modellen är, bara att imagen fungerar.
+      - name: Smoke-test
+        run: |
+          docker run -d --name churn -p 8000:8000 "$IMAGE"
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 1; done
+          curl -sf localhost:8000/health
+          curl -sf -X POST localhost:8000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"alder": 30, "region": "Stockholm", "abonnemang": "Bas", "manader_som_kund": 3, "manadskostnad": 149.0, "data_gb_per_manad": 12.5, "supportarenden_12m": 4}'
+
+      - name: Visa containerns logg om smoke-testet fallerar
+        if: failure()
+        run: docker logs churn
+
+      # Bara granskad kod på main blir en image i registret, aldrig en pull request.
+      - name: Logga in på ghcr.io
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pusha imagen
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: docker push "$IMAGE"
