@@ -74,3 +74,46 @@ python -m churn.score           # skriver outputs/ringlista.csv
 | `models/modell.joblib` | Modellen som kundtjänst använder just nu |
 | `arenden/` | Ärendena, och `skapa.sh` som gör dem till issues |
 | `.github/workflows/ci.yml` | Vårt CI |
+
+## Så fungerar pipelinen
+
+Workflowet `.github/workflows/ci.yml` körs vid varje push, vid pull requests mot main och
+manuellt (Actions → CI → Run workflow, där man kan välja vilken datafil som ska kontrolleras).
+Jobben körs i den här ordningen:
+
+1. `datakontroll` kontrollerar datafilen mot pandera-schemat i `kontroller/schema.py`, med alla
+   fel i en rapport. Schemafel stoppar pipelinen. Högre värden än vanligt, som 40 % högre
+   dataförbrukning, är inget schemafel utan en signal om att modellen kan behöva tränas om.
+2. `test` kör testerna på kod, data och modell, parallellt på Python 3.11, 3.12 och 3.13.
+3. `train` startar bara om `datakontroll` och alla testjobb är gröna. Det tränar på 3.11, samma
+   version som servern, och sparar modellen som artefakten `modell-<commit-SHA>`.
+4. `utvardera` laddar ner samma artefakt, visar mätvärdena i körningens Summary och stoppar
+   pipelinen om ROC AUC är under 0,70.
+5. `docker` bygger en image med samma modell, smoke-testar `/health` och `/predict` och pushar
+   imagen till `ghcr.io/hencyber/delta-saldes-churn:<commit-SHA>`. Push görs bara från main.
+
+Om ett jobb fallerar hoppas alla jobb efter det över. `main` är skyddad: varje ändring går via en
+pull request som en teamkamrat godkänner, och `datakontroll`, `test` och `utvardera` måste vara
+gröna innan den kan slås ihop.
+
+### Kvalitetströskeln
+
+Vi använder ROC AUC och inte accuracy. Ungefär 81 % av kunderna stannar, så en modell som alltid
+gissar att ingen slutar får redan 0,81 i accuracy utan att vara till någon nytta. ROC AUC mäter om
+modellen sätter kunder som slutar högre upp i ringlistan än kunder som stannar. 0,5 är slump, och
+vi kräver minst 0,70. Tröskeln kan ändras med miljövariabeln `MIN_ROC_AUC`.
+
+### Vilken modell kör vi?
+
+Imagen är taggad med commitens SHA och innehåller modellen från artefakten med samma SHA, alltså
+exakt den modell som klarade utvärderingen. `matvarden.json` i artefakten innehåller commit,
+datafil och datans sha256. Samma uppgifter visas av `/health` i den körande tjänsten.
+
+### Köra tjänsten lokalt
+
+```bash
+pip install -e ".[api]"
+python -m churn.model
+docker build -t churn .
+docker run -p 8000:8000 churn      # http://localhost:8000/health
+```
